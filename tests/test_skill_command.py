@@ -121,5 +121,70 @@ class TestSkillCommand(unittest.TestCase):
             )
 
 
+    def test_install_cursor_rule_when_rules_dir_exists(self):
+        """_install_skill should write agent-reach.mdc to ~/.cursor/rules/ when it exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cursor_rules_dir = os.path.join(tmpdir, ".cursor", "rules")
+            os.makedirs(cursor_rules_dir)
+
+            with patch(
+                "agent_reach.cli.os.path.expanduser",
+                side_effect=lambda p: p.replace("~", tmpdir),
+            ):
+                env = os.environ.copy()
+                env.pop("OPENCLAW_HOME", None)
+                with patch.dict(os.environ, env, clear=True):
+                    _install_skill()
+
+            mdc_path = os.path.join(cursor_rules_dir, "agent-reach.mdc")
+            self.assertTrue(os.path.exists(mdc_path), "agent-reach.mdc not created in ~/.cursor/rules/")
+            content = mdc_path and open(mdc_path, encoding="utf-8").read()
+            self.assertIn("Agent Reach", content)
+            # Cursor frontmatter should be present
+            self.assertIn("alwaysApply: false", content)
+            # Original OpenClaw-specific metadata should be stripped
+            self.assertNotIn("openclaw:", content)
+
+    def test_install_cursor_rule_skipped_when_no_rules_dir(self):
+        """_install_skill should not create ~/.cursor/rules/ if it doesn't already exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Ensure no .cursor/rules dir exists
+            cursor_rules_dir = os.path.join(tmpdir, ".cursor", "rules")
+            self.assertFalse(os.path.exists(cursor_rules_dir))
+
+            with patch(
+                "agent_reach.cli.os.path.expanduser",
+                side_effect=lambda p: p.replace("~", tmpdir),
+            ):
+                env = os.environ.copy()
+                env.pop("OPENCLAW_HOME", None)
+                with patch.dict(os.environ, env, clear=True):
+                    _install_skill()
+
+            self.assertFalse(os.path.exists(cursor_rules_dir))
+
+    def test_uninstall_cursor_rule(self):
+        """_uninstall_skill should remove agent-reach.mdc from ~/.cursor/rules/."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cursor_rules_dir = os.path.join(tmpdir, ".cursor", "rules")
+            os.makedirs(cursor_rules_dir)
+            mdc_path = os.path.join(cursor_rules_dir, "agent-reach.mdc")
+            with open(mdc_path, "w", encoding="utf-8") as f:
+                f.write("test rule")
+
+            self.assertTrue(os.path.exists(mdc_path))
+
+            with patch(
+                "agent_reach.cli.os.path.expanduser",
+                side_effect=lambda p: p.replace("~", tmpdir),
+            ):
+                env = os.environ.copy()
+                env.pop("OPENCLAW_HOME", None)
+                with patch.dict(os.environ, env, clear=True):
+                    _uninstall_skill()
+
+            self.assertFalse(os.path.exists(mdc_path))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,16 @@ from agent_reach import __version__
 # Pinned to the 0.4.2 state — PyPI still only has 0.4.1 (upstream issue #10).
 _RDT_GIT_SOURCE = "git+https://github.com/public-clis/rdt-cli.git@5e4fb3720d5c174e976cd425ccc3b879d52cac66"
 
+# Cursor IDE rule frontmatter — installed to ~/.cursor/rules/agent-reach.mdc
+_CURSOR_FRONTMATTER = """\
+---
+description: Agent Reach — 13-platform internet reading/search router. MUST USE for Twitter/X, Reddit, YouTube, GitHub, Bilibili, XiaoHongShu, LinkedIn, V2EX, Xueqiu (stocks), RSS, and general web research. Run `agent-reach doctor --json` to check which backend serves each platform.
+globs:
+alwaysApply: false
+---
+
+"""
+
 
 def _ensure_utf8_console():
     """Best-effort Windows console UTF-8 setup for CLI runtime only."""
@@ -45,6 +55,17 @@ def _configure_logging(verbose: bool = False):
     logger.remove()  # Remove default stderr handler
     if verbose:
         logger.add(sys.stderr, level="INFO")
+
+
+def _strip_yaml_frontmatter(text: str) -> str:
+    """Strip YAML frontmatter (--- ... ---) from markdown; return the body."""
+    s = text.strip()
+    if not s.startswith("---"):
+        return s
+    end = s.find("\n---", 3)
+    if end == -1:
+        return s
+    return s[end + 4:].lstrip("\n")
 
 
 def main():
@@ -440,6 +461,26 @@ def _install_skill():
             print("  -- Could not install agent skill (optional)")
             print("  -- Tip: install OpenClaw, Claude Code, or create ~/.agents/skills/ manually")
 
+    # ── Cursor IDE — ~/.cursor/rules/agent-reach.mdc ──
+    cursor_rules_dir = os.path.expanduser("~/.cursor/rules")
+    if os.path.isdir(cursor_rules_dir):
+        try:
+            try:
+                skill_pkg = importlib.resources.files("agent_reach").joinpath("skill")
+                cursor_md = _read_skill_markdown(skill_pkg)
+            except Exception:
+                from pathlib import Path
+                skill_pkg = Path(__file__).resolve().parent / "skill"
+                cursor_md = _read_skill_markdown(skill_pkg)
+
+            mdc_content = _CURSOR_FRONTMATTER + _strip_yaml_frontmatter(cursor_md)
+            mdc_path = os.path.join(cursor_rules_dir, "agent-reach.mdc")
+            with open(mdc_path, "w", encoding="utf-8") as f:
+                f.write(mdc_content)
+            print(f"Rule installed for Cursor: {mdc_path}")
+        except Exception as e:
+            print(f"  Warning: Could not install Cursor rule: {e}")
+
 
 def _uninstall_skill():
     """Remove SKILL.md from all known agent skill directories."""
@@ -472,6 +513,16 @@ def _uninstall_skill():
                 removed = True
             except Exception as e:
                 print(f"  Could not remove {skill_path}: {e}")
+
+    # Cursor IDE rule
+    cursor_rule = os.path.expanduser("~/.cursor/rules/agent-reach.mdc")
+    if os.path.isfile(cursor_rule):
+        try:
+            os.unlink(cursor_rule)
+            print(f"  Removed Cursor rule: {cursor_rule}")
+            removed = True
+        except Exception as e:
+            print(f"  Could not remove {cursor_rule}: {e}")
 
     if not removed:
         print("  No skill installations found.")
@@ -1402,6 +1453,19 @@ def _cmd_uninstall(args):
                     removed_any = True
                 except Exception as e:
                     print(f"  Could not remove {skill_path}: {e}")
+
+    # Cursor IDE rule
+    cursor_rule = os.path.expanduser("~/.cursor/rules/agent-reach.mdc")
+    if os.path.isfile(cursor_rule):
+        if dry_run:
+            print(f"[dry-run] Would remove Cursor rule: {cursor_rule}")
+        else:
+            try:
+                os.unlink(cursor_rule)
+                print(f"  Removed Cursor rule: {cursor_rule}")
+                removed_any = True
+            except Exception as e:
+                print(f"  Could not remove {cursor_rule}: {e}")
 
     # ── 3. mcporter MCP entries ──
     if shutil.which("mcporter"):
